@@ -28,7 +28,7 @@ def user_endpoint():
                 cursor.execute("SELECT * FROM user WHERE id = ?", [user_id],)
             else:   
                 cursor.execute("SELECT * FROM user")
-                user =cursor.fetchall()[0]
+            users =cursor.fetchall()
         except Exception as error:  
             print("Sorry you're F'ed.  Internal error and I'm too lazy to log further. HA.")
             print(error)
@@ -38,8 +38,21 @@ def user_endpoint():
             if(conn != None):
                 conn.rollback()
                 conn.close()
-            if(user != None):
-                return Response(json.dumps(user, default=str), mimetype="application/json", status=205)
+            if(users != None):
+                empty = []
+                for user in users : 
+                    element = { 
+                        "userId":user[4],
+                        "email":user[1],
+                        "username":user[0],
+                        "bio":user[2],
+                        "birthday":user[3]
+
+
+                    }
+
+                    empty.append(element)
+                return Response(json.dumps(empty, default=str), mimetype="application/json", status=200)
             else:
                 return Response("Look's like you F'd up! GET ERROR", mimetype="text/html", status=505)            
 #USER_POST#############################################USER_POST########################USER_POST#############################################
@@ -57,12 +70,13 @@ def user_endpoint():
         try:
             conn = mariadb.connect(host=dbcreds.host, password=dbcreds.password, user=dbcreds.user, port=dbcreds.port, database=dbcreds.database)
             cursor = conn.cursor() 
-            cursor.execute("INSERT INTO user(username, bio, birthdate, email, password) VALUES (?,?,?,?,?)", [username, bio, birthdate, email, password])
-            conn.commit()
-            user_id = cursor.lastrowid
-            cursor.execute("INSERT INTO user_session(login_token, user_id) VALUES (?,?)", [loginToken, user_id])
-            conn.commit()
-            rows = cursor.rowcount                                                                                            
+            if username != None and username!= "" and email != None and email!= "" and birthdate != None and birthdate!= "" and password != None and password!= "" and bio != None and bio!= "":
+                cursor.execute("INSERT INTO user(username, bio, birthdate, email, password) VALUES (?,?,?,?,?)", [username, bio, birthdate, email, password])
+                conn.commit()
+                user_id = cursor.lastrowid
+                cursor.execute("INSERT INTO user_session(login_token, user_id) VALUES (?,?)", [loginToken, user_id])
+                conn.commit()
+                rows = cursor.rowcount                                                                                            
         except Exception as error:
             print("Sorry you're F'ed.  Intrnal error and I'm too lazy to log further. HA.")
             print(error)
@@ -116,7 +130,7 @@ def user_endpoint():
             conn.commit()
             rows = cursor.rowcount
             cursor.execute("SELECT * FROM user WHERE id=?", [user_id])
-            user = cursor.fetchall()
+            user = cursor.fetchone()
         except Exception as error:
             print("Something went wrong (THIS IS LAZY)")
             print(error)
@@ -127,7 +141,14 @@ def user_endpoint():
                 conn.rollback()
                 conn.close()
             if(rows == 1):
-                return Response (json.dumps(user, default=str), mimetype="application/json", status="215")
+                myuser = {
+                     "userId":user_id,
+                     "email": user[1],
+                    "username":user[0],
+                    "bio":user[2],
+                    "birthdate":user[3],                  
+                }
+                return Response (json.dumps(myuser, default=str), mimetype="application/json", status="215")
             else:
                 return Response("Look's like you F'd up! PATCH ERROR ", mimetype="text/html", status=515)            
 #USER_DELETE############################################################################################################
@@ -140,14 +161,11 @@ def user_endpoint():
         try :
             conn = mariadb.connect(host=dbcreds.host, password=dbcreds.password, user=dbcreds.user, port=dbcreds.port, database=dbcreds.database)
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM user_session WHERE login_token = ?", [loginToken,])
-            delete_user = cursor.fetchall()
-            print(delete_user)
-            cursor.execute("DELETE FROM user WHERE id = ? AND password = ?", [delete_user[0][1], password,])
+            cursor.execute("SELECT user_id FROM user_session WHERE login_token = ?", [loginToken,])
+            user_id = cursor.fetchone()[0]
+            cursor.execute("DELETE FROM user WHERE id = ? AND password = ?", [user_id, password,])
             conn.commit()
             rows = cursor.rowcount
-            print(delete_user[0][1])
-            print("Sorry you're F'ed.  Internal error and I'm too lazy to log further. HA.")
         finally:
             if(cursor != None):
                 cursor.close()
@@ -155,7 +173,7 @@ def user_endpoint():
                 conn.rollback()
                 conn.close()
             if(rows == 1):
-                return Response("Guess What?!? USER DELETED...", mimetype="text/html", status=220)
+                return Response("Guess What?!? USER DELETED...", mimetype="text/html", status=204)
             else:
                 return Response("Look's like you F'd up! DELETE ERROR", mimetype="text/html", status=520)
             
@@ -200,7 +218,6 @@ def login_endpoint():
                      "username": user[0][2],
                      "birthdate": user[0][3],
                      "email": user[0][4],
-                     "password": password,
                     "loginToken": loginToken                   
                 }
                 return Response (json.dumps(user, default=str), mimetype="application/json", status="210")
@@ -230,7 +247,7 @@ def login_endpoint():
                 conn.rollback()
                 conn.close()
             if(rows == 1):
-                return Response("Guess What?!? USER DELETED...", mimetype="application/json", status=220)
+                return Response("Guess What?!? loged out...", mimetype="application/json", status=220)
             else:
                 return Response("Look's like you F'd up! DELETE ERROR", mimetype="text/html", status=520)
             
@@ -243,13 +260,16 @@ def tweets_endpoint():
         cursor = None
         tweet = None
         password = None
+        userId = request.args.get("userId")
         
         try :
             conn = mariadb.connect(host=dbcreds.host, password=dbcreds.password, user=dbcreds.user, port=dbcreds.port, database=dbcreds.database)
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM tweet INNER JOIN user ON tweet.user_id=user.id")
-            tweet =cursor.fetchall()[0]
-            print(tweet)[0]
+            if userId != None :
+                cursor.execute("SELECT * FROM tweet INNER JOIN user ON tweet.user_id=user.id WHERE user.id = ?",[userId])
+            else:
+                cursor.execute("SELECT * FROM tweet INNER JOIN user ON tweet.user_id=user.id")
+            tweets =cursor.fetchall()
         except Exception as error:  
             print("Sorry you're F'ed.  Internal error and I'm too lazy to log further. HA.")
             print(error)
@@ -259,16 +279,20 @@ def tweets_endpoint():
             if(conn != None):
                 conn.rollback()
                 conn.close()
-            if(tweet != None):
-                { 
-          "commentId": tweet[0],
-          "tweetId": tweet[0],
-          "userId": tweet[2],
-          "username": tweet[4],
-          "content": tweet[6],
-          "createdAt": tweet[7],
-                    },
-                return Response(json.dumps(tweet, default=str), mimetype="application/json", status=205)
+            if(tweets != None):
+                myTweets = []
+                for tweet in tweets : 
+                    myTweet ={ 
+                        "tweetId": tweet[0],
+                        "userId": tweet[2],
+                        "username": tweet[4],
+                        "content": tweet[1],
+                        "createdAt": tweet[3],
+                        }
+                    myTweets.append(myTweet)
+
+            
+                return Response(json.dumps(myTweets, default=str), mimetype="application/json", status=205)
             else:
                 return Response("Look's like you F'd up! GET ERROR", mimetype="text/html", status=505)
 #TWEET_POST##########################################################################################TWEET_POST#############################
@@ -289,11 +313,12 @@ def tweets_endpoint():
             username = cursor.fetchone()[0]
             print(user_id)
             cursor.execute("INSERT INTO tweet(user_id, content) VALUES (?,?)", [user_id, content])
+            conn.commit()
             rows = cursor.rowcount
             tweetId = cursor.lastrowid
             cursor.execute("SELECT created_at FROM tweet WHERE id=?", [tweetId])
             created_at = cursor.fetchone()[0]
-            conn.commit()
+           
         except Exception as error:
             print("Sorry you're F'ed.  Internal error and I'm too lazy to log further. HA.")
             print(error)
@@ -318,6 +343,7 @@ def tweets_endpoint():
     elif request.method == "PATCH":
         conn = None
         cursor = None
+        tweetId = request.json.get("tweetId")
         content = request.json.get("content")
         loginToken = request.json.get("loginToken")
         rows = None
@@ -329,12 +355,15 @@ def tweets_endpoint():
             user_id = cursor.fetchone()[0]
             
             print (user_id)
-            if content!= "" and content != None:
-                cursor.execute("UPDATE user SET username=? WHERE id=?", [username, user_id])
+            print(tweetId)
+            print(content)
+            if content!= "" and content != None and tweetId !=None:
+                cursor.execute("UPDATE tweet SET content =? WHERE id=? AND user_id=?", [content, tweetId,user_id])
             conn.commit()
             rows = cursor.rowcount
+            print(rows)
             cursor.execute("SELECT * FROM user WHERE id=?", [user_id])
-            username = cursor.fetchall()
+            username = cursor.fetchall()[0][0]
         except Exception as error:
             print("Something went wrong (THIS IS LAZY)")
             print(error)
@@ -347,10 +376,8 @@ def tweets_endpoint():
             if(rows == 1):
                 tweet = {
                     "tweetId": tweetId,
-                    "userId": user_id, 
-                    "username": username,
                     "content": content,
-                    "created_at": created_at,
+                    
                 }
                 return Response (json.dumps(tweet, default=str), mimetype="application/json", status="215")
             else:
@@ -382,7 +409,7 @@ def tweets_endpoint():
                 conn.rollback()
                 conn.close()
             if(rows == 1):
-                return Response("Guess What?!? USER DELETED...", mimetype="application/json", status=220)
+                return Response("Guess What?!?  DELETED...", mimetype="application/json", status=220)
             else:
                 return Response("Look's like you F'd up! DELETE ERROR", mimetype="text/html", status=520)
 #END OF @TWEET#################################################################################END OF @TWEET###############################
@@ -393,12 +420,13 @@ def comment_endpoint():
         conn = None
         cursor = None
         comment = None
+        tweetId = request.args.get("tweetId")
         try :
             conn = mariadb.connect(host=dbcreds.host, password=dbcreds.password, user=dbcreds.user, port=dbcreds.port, database=dbcreds.database)
             cursor = conn.cursor()
-            cursor.execute("SELECT comment.*, user.username FROM comment INNER JOIN user ON comment.userId = user.id WHERE comment.tweetId = ?", [tweetId,])
-            comment =cursor.fetchall()
-            print(comment)
+            if tweetId != None :
+                cursor.execute("SELECT * FROM comment INNER JOIN user ON comment.user_id = user.id WHERE comment.tweet_id=?",[tweetId])
+                comments =cursor.fetchall()
         except Exception as error:  
             print("Sorry you're F'ed.  Internal error and I'm too lazy to log further. HA.")
             print(error)
@@ -408,8 +436,19 @@ def comment_endpoint():
             if(conn != None):
                 conn.rollback()
                 conn.close()
-            if(comment != None):
-                return Response(json.dumps(comment, default=str), mimetype="application/json", status=205)
+            if(comments != None):
+                myComments = []
+                for comment in comments:
+                    myComment = {
+                        "commentId":comment[0],
+                        "tweetId":comment[2],
+                        "userId":comment[3],
+                        "username":comment[5],
+                        "content":comment[4],
+                        "createdAt":comment[1]
+                    }
+                    myComments.append(myComment)
+                return Response(json.dumps(myComments, default=str), mimetype="application/json", status=205)
             else:
                 return Response("Look's like you F'd up! GET ERROR", mimetype="text/html", status=505)
 #COMMENT_POST#############################################################################################COMMENT_POST#####################################
@@ -420,19 +459,19 @@ def comment_endpoint():
         loginToken = request.json.get("loginToken")
         rows = None
         comment = None
-        tweet_id = request.json.get("tweet_id")
+        tweet_id = request.json.get("tweetId")
         try:
             conn = mariadb.connect(host=dbcreds.host, password=dbcreds.password, user=dbcreds.user, port=dbcreds.port, database=dbcreds.database)
             cursor = conn.cursor() 
             cursor.execute("SELECT user_id FROM user_session WHERE login_token =?", [loginToken])
-            tweet_id = cursor.fetchone()[0]
-            cursor.execute("SELECT id, tweet_id, content FROM comment WHERE id=?", [tweet_id, content])
-            comment = cursor.fetchall()
-            print(comment)
-            cursor.execute("INSERT INTO comment(user_id, content) VALUES (?,?)", [tweet_id, content])
+            user_id = cursor.fetchone()[0]
+            cursor.execute("SELECT username FROM user WHERE id =?", [user_id])
+            username = cursor.fetchone()[0]
+            cursor.execute("INSERT INTO comment(user_id,tweet_id , content) VALUES (?,?,?)", [user_id, tweet_id, content])
+            conn.commit()
             rows = cursor.rowcount
-            tweetId = cursor.lastrowid
-            cursor.execute("SELECT created_at FROM comment WHERE id=?", [tweet_id])
+            commentId = cursor.lastrowid
+            cursor.execute("SELECT created_at FROM comment WHERE id=?", [commentId])
             created_at = cursor.fetchone()[0]
             conn.commit()
         except Exception as error:
@@ -445,14 +484,14 @@ def comment_endpoint():
                 conn.rollback()
                 conn.close()
             if(rows == 1):
-                # comment = {
-                #     "commentId": commentId,
-                #     "tweetId": tweetId, 
-                #     "userId": userId,
-                #     "username": username,
-                #     "content": content,
-                #     "created_at": created_at,
-                # }
+                comment = {
+                    "commentId": commentId,
+                    "tweetId": tweet_id, 
+                    "userId": user_id,
+                    "username": username,
+                    "content": content,
+                    "created_at": created_at,
+                }
                 return Response (json.dumps(comment, default=str), mimetype="application/json", status="210")
             else:
                 return Response("Look's like you F'd up! POST ERROR", mimetype="text/html", status=510)   
@@ -505,13 +544,11 @@ def comment_endpoint():
         loginToken = request.json.get("loginToken")
         comment_id = request.json.get("commentId")
         try :
-            
             conn = mariadb.connect(host=dbcreds.host, password=dbcreds.password, user=dbcreds.user, port=dbcreds.port, database=dbcreds.database)
             cursor = conn.cursor()
             cursor.execute ("SELECT user_id from user_session WHERE login_token =?", [loginToken])
             user_id = cursor.fetchone()[0]
-            print(user_id)
-            cursor.execute("DELETE FROM tweet WHERE user_id =? AND id=?", [user_id, comment_id])            
+            cursor.execute("DELETE FROM comment WHERE user_id =? AND id=?", [user_id, comment_id])            
             conn.commit()
             rows = cursor.rowcount            
         except Exception as error:  
@@ -542,7 +579,7 @@ def tweetlikes_endpoint():
             conn = mariadb.connect(host=dbcreds.host,password=dbcreds.password, user=dbcreds.user, port=dbcreds.port, database=dbcreds.database)
             cursor = conn.cursor()
             if tweet_id != "" and tweet_id != None:
-                cursor.execute("SELECT t.tweet_id, u.id, u.username FROM tweet_like t INNER JOIN user u ON t.user_id = u.id WHERE t.tweet_id =?"[tweet_id])   
+                cursor.execute("SELECT t.tweet_id, u.id, u.username FROM tweet_like t INNER JOIN user u ON t.user_id = u.id WHERE t.tweet_id =?",[tweet_id])   
             else:
                 cursor.execute("SELECT t.tweet_id, u.id, u.username FROM tweet_like t INNER JOIN user u ON t.user_id = u.id ")
             tweet_likes =cursor.fetchall()
@@ -571,7 +608,7 @@ def tweetlikes_endpoint():
     elif request.method == 'POST':
         conn = None
         cursor = None
-        tweet_id = request.json.get("tweet_id")
+        tweet_id = request.json.get("tweetId")
         loginToken = request.json.get("loginToken")
         rows = None
         user_id = None
@@ -579,16 +616,15 @@ def tweetlikes_endpoint():
             conn = mariadb.connect(host=dbcreds.host, password=dbcreds.password, user=dbcreds.user, port=dbcreds.port, database=dbcreds.database)
             cursor = conn.cursor() 
             cursor.execute("SELECT user_id FROM user_session WHERE login_token =?", [loginToken])
-            user_id = cursor.lastrowid
-            # cursor.execute("SELECT tweet_id FROM tweet WHERE id=?", [tweet_id])
-            # username = cursor.fetchone()[0]
+            user_id = cursor.fetchone()[0]
             print(user_id)
-            cursor.execute("INSERT INTO tweet_likes(user_id, tweet_id) VALUES (?,?)", [user_id, tweet_id])
+            cursor.execute("INSERT INTO tweet_like(user_id, tweet_id) VALUES (?,?)", [user_id, tweet_id])
             # rows = cursor.rowcount
             # tweet_like = cursor.fetchall()
             # cursor.execute("SELECT created_at FROM tweet WHERE id=?", [tweetId])
             # created_at = cursor.fetchone()[0]
             conn.commit()
+            rows=cursor.rowcount
         except Exception as error:
             print("Sorry you're F'ed.  Internal error and I'm too lazy to log further. HA.")
             print(error)
@@ -600,10 +636,184 @@ def tweetlikes_endpoint():
                 conn.close()
             if(rows == 1):
               
-                return Response("Tweet offically liked!", mimetype="text/html", status=510)
+                return Response("Tweet offically liked!", mimetype="text/html", status=201)
+            else:
+                return Response("Look's like you F'd up! POST ERROR", mimetype="text/html", status=510)
+    elif request.method == 'DELETE':
+        conn = None
+        cursor = None
+        tweet_id = request.json.get("tweetId")
+        loginToken = request.json.get("loginToken")
+        rows = None
+        user_id = None
+        try:
+            conn = mariadb.connect(host=dbcreds.host, password=dbcreds.password, user=dbcreds.user, port=dbcreds.port, database=dbcreds.database)
+            cursor = conn.cursor() 
+            cursor.execute("SELECT user_id FROM user_session WHERE login_token =?", [loginToken])
+            user_id = cursor.fetchone()[0]
+            print(user_id)
+            print(tweet_id)
+            cursor.execute("DELETE FROM tweet_like WHERE user_id =? AND tweet_id=?", [user_id, tweet_id])
+            conn.commit()
+            rows=cursor.rowcount
+        except Exception as error:
+            print("Sorry you're F'ed.  Internal error and I'm too lazy to log further. HA.")
+            print(error)
+        finally:
+            if(cursor != None):
+                cursor.close()
+            if(conn != None):
+                conn.rollback()
+                conn.close()
+            if(rows == 1):
+              
+                return Response("Tweet LIKE offically deleted!", mimetype="text/html", status=204)
             else:
                 return Response("Look's like you F'd up! POST ERROR", mimetype="text/html", status=510)
 
+@app.route('/api/comment-likes', methods=['GET', 'POST', 'DELETE'])
+def commentlikes_endpoint():
+    if request.method == 'GET':
+        conn = None
+        cursor = None
+        comment_id = request.args.get("commentId")
+        comment_likes = None
+        all_comment_likes = None
+
+        try :
+            conn = mariadb.connect(host=dbcreds.host,password=dbcreds.password, user=dbcreds.user, port=dbcreds.port, database=dbcreds.database)
+            cursor = conn.cursor()
+            if comment_id != "" and comment_id != None:
+                cursor.execute("SELECT c.comment_id, u.id, u.username FROM comment_like c INNER JOIN user u ON c.user_id = u.id WHERE c.comment_id =?",[comment_id])   
+            else:
+                cursor.execute("SELECT c.comment_id, u.id, u.username FROM comment_like c INNER JOIN user u ON c.user_id = u.id")
+            comment_likes =cursor.fetchall()
+            print(comment_likes)
+        except Exception as error:  
+            print("Sorry you're F'ed.  Internal error and I'm too lazy to log further. HA.")
+            print(error)
+        finally:
+            if(cursor != None):
+                cursor.close()
+            if(conn != None):
+                conn.rollback()
+                conn.close()
+            if(comment_likes != None):
+                    all_comment_likes = []
+                    for comment_like in comment_likes:
+                        user_data = {
+                            "commentId": comment_like[0],
+                            "userId": comment_like[1],
+                            "username": comment_like[2]
+                        }
+                        
+                        all_comment_likes.append(user_data)
+            return Response(json.dumps(all_comment_likes, default=str), mimetype="application/json", status=205)
+######################################################################################################################################
+    elif request.method == 'POST':
+        conn = None
+        cursor = None
+        comment_id = request.json.get("commentId")
+        loginToken = request.json.get("loginToken")
+        rows = None
+        user_id = None
+        try:
+            conn = mariadb.connect(host=dbcreds.host, password=dbcreds.password, user=dbcreds.user, port=dbcreds.port, database=dbcreds.database)
+            cursor = conn.cursor() 
+            cursor.execute("SELECT user_id FROM user_session WHERE login_token =?", [loginToken])
+            user_id = cursor.fetchone()[0]
+            print(user_id)
+            cursor.execute("INSERT INTO comment_like(user_id, comment_id) VALUES (?,?)", [user_id, tweet_id])
+            # rows = cursor.rowcount
+            # tweet_like = cursor.fetchall()
+            # cursor.execute("SELECT created_at FROM tweet WHERE id=?", [tweetId])
+            # created_at = cursor.fetchone()[0]
+            conn.commit()
+            rows=cursor.rowcount
+        except Exception as error:
+            print("Sorry you're F'ed.  Internal error and I'm too lazy to log further. HA.")
+            print(error)
+        finally:
+            if(cursor != None):
+                cursor.close()
+            if(conn != None):
+                conn.rollback()
+                conn.close()
+            if(rows == 1):
+              
+                return Response("comment offically liked!", mimetype="text/html", status=201)
+            else:
+                return Response("Look's like you F'd up! POST ERROR", mimetype="text/html", status=510)
+    elif request.method == 'DELETE':
+        conn = None
+        cursor = None
+        comment_id = request.json.get("commentId")
+        loginToken = request.json.get("loginToken")
+        rows = None
+        user_id = None
+        try:
+            conn = mariadb.connect(host=dbcreds.host, password=dbcreds.password, user=dbcreds.user, port=dbcreds.port, database=dbcreds.database)
+            cursor = conn.cursor() 
+            cursor.execute("SELECT user_id FROM user_session WHERE login_token =?", [loginToken])
+            user_id = cursor.fetchone()[0]
+            print(user_id)
+            print(tweet_id)
+            cursor.execute("DELETE FROM comment_like WHERE user_id =? AND comment_id=?", [user_id, comment_id])
+            conn.commit()
+            rows=cursor.rowcount
+        except Exception as error:
+            print("Sorry you're F'ed.  Internal error and I'm too lazy to log further. HA.")
+            print(error)
+        finally:
+            if(cursor != None):
+                cursor.close()
+            if(conn != None):
+                conn.rollback()
+                conn.close()
+            if(rows == 1):
+              
+                return Response("Comment LIKE offically deleted!", mimetype="text/html", status=204)
+            else:
+                return Response("Look's like you F'd up! POST ERROR", mimetype="text/html", status=510)
+#FOLLOWS_GET################################################################################################################################
+@app.route('/api/user_follows', methods=['GET', 'POST', 'DELETE'])
+def follows_endpoint():
+    if request.method == 'GET':
+        conn = None
+        cursor = None
+        user_id = request.args.get("userId")
+
+        try :
+            conn = mariadb.connect(host=dbcreds.host,password=dbcreds.password, user=dbcreds.user, port=dbcreds.port, database=dbcreds.database)
+            cursor = conn.cursor()
+            if user_id != "" and user_id != None:
+                cursor.execute("SELECT u.user_id, u.id, u.username, u.bio, u.email FROM user_follows uf INNER JOIN user u ON user u ON u.id = uf.user_id =?,"[user_id])  
+            else:
+                cursor.execute("SELECT u.user_id, u.id, u.username, u.bio, u.email FROM user_follows uf INNER JOIN user u ON user u = u.id ")
+            tweet_likes =cursor.fetchall()
+            print(user_id)
+        except Exception as error:  
+            print("Sorry you're F'ed.  Internal error and I'm too lazy to log further. HA.")
+            print(error)
+        finally:
+            if(cursor != None):
+                cursor.close()
+            if(conn != None):
+                conn.rollback()
+                conn.close()
+            if(user_id != None):
+                    user_follows = []
+                    for user_follow in user_follows:
+                        user_data = {
+  "                     "userId": userId,
+                        "email": 
+                        "username": "TheLorax",
+                        "bio": "I am the Lorax, I speak for the trees",
+                        "birthdate": "1971-06-23"                           
+                        }
+                        
+                        all_tweet_likes.append(user_data)
+            return Response(json.dumps(all_tweet_likes, default=str), mimetype="application/json", status=205)
     
 
 
